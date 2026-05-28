@@ -232,6 +232,11 @@ cleanup() {
     hdiutil detach "${MOUNT_POINT}" >/dev/null 2>&1 || hdiutil detach -force "${MOUNT_POINT}" >/dev/null 2>&1 || true
   fi
 
+  # Clean up /tmp shim directory if we created one.
+  if [[ -n "${SHIM_INCLUDE_DIR:-}" ]] && [[ "${SHIM_INCLUDE_DIR}" == /tmp/codex-intel-shim-* ]] && [[ -d "${SHIM_INCLUDE_DIR}" ]]; then
+    rm -rf "${SHIM_INCLUDE_DIR}"
+  fi
+
   if [[ ${exit_code} -ne 0 ]]; then
     log "Build failed. See ${LOG_FILE}"
     log "Temporary files kept at: ${WORK_DIR}"
@@ -486,12 +491,15 @@ EOF
   cd "${BUILD_PROJECT}"
   progress 45 "Installing npm dependencies (estimated progress will update during this stage; timeout: 20 minutes)"
   # Force npm/electron to resolve darwin-x64 artifacts even when building on Apple Silicon.
+  # .npmrc avoids deprecated npm_config_* env vars (will be removed in a future npm major).
+  cat > .npmrc <<'NPMRC'
+platform=darwin
+arch=x64
+force=true
+NPMRC
   run_with_estimated_progress 45 59 1200 "Installing npm dependencies" \
-    run_with_timeout 1200 env \
-      npm_config_platform=darwin \
-      npm_config_arch=x64 \
-      npm_config_force=true \
-      npm install --no-audit --no-fund --package-lock=false --force
+    run_with_timeout 1200 npm install --no-audit --no-fund --package-lock=false --force
+  rm -f .npmrc
 )
 
 # Use Electron x64 app template as the destination runtime.

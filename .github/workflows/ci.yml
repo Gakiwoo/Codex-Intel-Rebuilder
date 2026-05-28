@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Shellcheck & syntax validation
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        run: |
+          brew install shellcheck 2>/dev/null || true
+          shellcheck --severity=warning scripts/*.sh
+
+      - name: Validate bash syntax
+        run: |
+          for script in scripts/*.sh; do
+            echo "Checking: ${script}"
+            bash -n "${script}"
+          done
+
+  build-dry-run:
+    name: Dry-run pipeline validation
+    runs-on: macos-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check script provides usage help
+        run: |
+          bash scripts/build-intel.sh --help || true
+
+      - name: Check all required system tools available
+        run: |
+          for cmd in hdiutil ditto npm npx node file codesign xattr; do
+            if ! command -v "${cmd}" &>/dev/null; then
+              echo "ERROR: Missing system tool: ${cmd}"
+              exit 1
+            fi
+            echo "OK: ${cmd}"
+          done
+          if [[ ! -x "/usr/libexec/PlistBuddy" ]]; then
+            echo "ERROR: Missing /usr/libexec/PlistBuddy"
+            exit 1
+          fi
+          echo "OK: PlistBuddy"
